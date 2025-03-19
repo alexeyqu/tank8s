@@ -59,8 +59,8 @@ module "eks" {
   subnet_ids = module.vpc.private_subnets
 
   eks_managed_node_groups = {
-    one = {
-      name = "node-group-1"
+    playwright = {
+      name = "playwright-workers"
 
       instance_types = ["t3.small"]
 
