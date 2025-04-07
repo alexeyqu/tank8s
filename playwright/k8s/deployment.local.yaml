@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playwright-load-tester
+  labels:
+    app: playwright-load-tester
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: playwright-load-tester
+  template:
+    metadata:
+      labels:
+        app: playwright-load-tester
+    spec:
+      containers:
+      - name: playwright-load-tester
+        image: playwright-load-tester:latest
+        imagePullPolicy: Never  # Use local image
+        env:
+        - name: TARGET_URL
+          value: "http://host.minikube.internal:8080"  # Access host machine
+        - name: CONCURRENT_SESSIONS
+          value: "2"  # Reduced for local testing
+        - name: TEST_DURATION
+          value: "60000"  # 1 minute for testing
+        - name: THINK_TIME
+          value: "1000"
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: logs
+        emptyDir: {} 
