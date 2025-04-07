@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  load-tester:
+    build: .
+    volumes:
+      - ./logs:/app/logs
+    environment:
+      - TARGET_URL=${TARGET_URL:-http://localhost:3000}
+      - CONCURRENT_SESSIONS=${CONCURRENT_SESSIONS:-5}
+      - TEST_DURATION=${TEST_DURATION:-300000}
+      - THINK_TIME=${THINK_TIME:-2000}
+    networks:
+      - load-test-network
+
+networks:
+  load-test-network:
+    driver: bridge 
