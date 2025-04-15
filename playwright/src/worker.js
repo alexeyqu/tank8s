@@ -1,6 +1,89 @@
 const { chromium } = require('@playwright/test');
 const winston = require('winston');
 const path = require('path');
+const promClient = require('prom-client');
+const express = require('express');
+
+// Initialize Prometheus metrics
+// const register = new promClient.Registry();
+// promClient.collectDefaultMetrics({ register });
+
+// // Custom metrics
+// const pageLoadTime = new promClient.Histogram({
+//   name: 'playwright_page_load_time_seconds',
+//   help: 'Time taken to load pages',
+//   labelNames: ['url', 'status'],
+//   buckets: [0.1, 0.5, 1, 2, 5, 10]
+// });
+
+// const pageLoadErrors = new promClient.Counter({
+//   name: 'playwright_page_load_errors_total',
+//   help: 'Total number of page load errors',
+//   labelNames: ['url']
+// });
+
+// register.registerMetric(pageLoadTime);
+// register.registerMetric(pageLoadErrors);
+
+async function logToLoki(message, labels = {}) {
+  const stream = {
+    stream: {
+      job: 'playwright',
+      ...labels,
+    },
+    values: [
+      // time in nanoseconds, message
+      [Date.now() * 1_000_000 + '', message],
+    ],
+  };
+
+  const body = {
+    streams: [stream],
+  };
+
+  try {
+    await fetch('http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    console.error('Failed to push to Loki', err);
+  }
+}
+
+// Start metrics server
+const app = express();
+const port = 3000;
+
+// Add logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
+app.get('/metrics', async (req, res) => {
+  try {
+    console.log('Metrics endpoint called');
+    const metrics = await register.metrics();
+    console.log('Metrics collected:', metrics);
+    res.set('Content-Type', register.contentType);
+    res.end(metrics);
+  } catch (error) {
+    console.error('Error collecting metrics:', error);
+    res.status(500).send('Error collecting metrics');
+  }
+});
+
+app.get('/health', (req, res) => {
+  res.send('OK');
+});
+
+app.listen(port, () => {
+  console.log(`Metrics server listening on port ${port}`);
+  console.log(`Health check available at http://localhost:${port}/health`);
+  console.log(`Metrics available at http://localhost:${port}/metrics`);
+});
 
 // Configure logger
 const logger = winston.createLogger({
@@ -42,7 +125,20 @@ async function measurePageLoad(page, url) {
   const startTime = Date.now();
   try {
     const response = await page.goto(url, { waitUntil: 'networkidle' });
-    const loadTime = Date.now() - startTime;
+    const loadTime = (Date.now() - startTime) / 1000; // Convert to seconds
+    
+    // Record metrics
+    await logToLoki(JSON.stringify({
+      url: url,
+      ttl: loadTime,
+      status: response.status().toString(),
+      ts: new Date().toISOString(),
+    }));
+    
+    // pageLoadTime.observe(
+    //   { url, status: response.status().toString() },
+    //   loadTime
+    // );
     
     logger.info('Page load metrics', {
       url,
@@ -58,6 +154,9 @@ async function measurePageLoad(page, url) {
       success: response.ok()
     };
   } catch (error) {
+    // Record error metrics
+    // pageLoadErrors.inc({ url });
+    
     logger.error('Page load failed', {
       url,
       error: error.message,
@@ -75,7 +174,7 @@ async function measurePageLoad(page, url) {
 
 async function runTestSession(sessionId) {
   const browser = await chromium.launch();
-  const context = await browser.newContext();
+  const context = await browser.newContext({ignoreHTTPSErrors: true});
   const page = await context.newPage();
 
   logger.info('Starting test session', { sessionId });

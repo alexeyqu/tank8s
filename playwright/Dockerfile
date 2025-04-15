@@ -21,5 +21,8 @@ ENV CONCURRENT_SESSIONS=5
 ENV TEST_DURATION=300000
 ENV THINK_TIME=2000
 
+# Expose metrics port
+EXPOSE 3000
+
 # Run the load test
 CMD ["npm", "test"]
