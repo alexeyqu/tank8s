@@ -39,4 +39,15 @@ spec:
           mountPath: /app/logs
       volumes:
       - name: logs
-        emptyDir: {} 
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: playwright-load-tester
+spec:
+  selector:
+    app: playwright-load-tester
+  ports:
+    - port: 3000
+      targetPort: 3000
