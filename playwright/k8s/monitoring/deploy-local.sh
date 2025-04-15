@@ -14,3 +14,5 @@ helm repo update
 helm upgrade --install $RELEASE_NAME grafana/loki-stack \
   -n $NAMESPACE \
   -f ./loki-values.yaml
+
+minikube service loki-grafana -n monitoring
