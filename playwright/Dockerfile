@@ -1,5 +1,14 @@
 FROM mcr.microsoft.com/playwright:v1.51.1-jammy
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      curl \
+      dnsutils \
+      iputils-ping \
+      libnss3 \
+      libnss-resolve && \
+    echo "hosts: files dns" > /etc/nsswitch.conf
+
 WORKDIR /app
 
 # Copy package files
