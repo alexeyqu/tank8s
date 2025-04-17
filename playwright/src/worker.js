@@ -182,7 +182,10 @@ const think = (min, max) => new Promise(resolve => {
 
 async function runTestSession(sessionId) {
   const browser = await chromium.launch();
-  const context = await browser.newContext({ignoreHTTPSErrors: true});
+  const context = await browser.newContext({
+    ignoreHTTPSErrors: true,
+    userAgent: 'PlaywrightLoadTestBot/1.0'
+  });
   const page = await context.newPage();
 
   logger.info('Starting test session', { sessionId });
