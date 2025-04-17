@@ -108,7 +108,6 @@ const CONFIG = {
   pagesToTest: [
     '/',
     '/about',
-    '/contact'
   ],
   concurrentSessions: parseInt(process.env.CONCURRENT_SESSIONS) || 5,
   testDuration: parseInt(process.env.TEST_DURATION) || 300000, // 5 minutes in milliseconds
@@ -127,30 +126,32 @@ async function measurePageLoad(page, url) {
     const response = await page.goto(url, { waitUntil: 'networkidle' });
     const loadTime = (Date.now() - startTime) / 1000; // Convert to seconds
     
-    // Record metrics
-    await logToLoki(JSON.stringify({
-      url: url,
-      ttl: loadTime,
-      status: response.status().toString(),
-      ts: new Date().toISOString(),
-    }));
-    
-    // pageLoadTime.observe(
-    //   { url, status: response.status().toString() },
-    //   loadTime
-    // );
-    
-    logger.info('Page load metrics', {
-      url,
-      loadTime,
-      status: response.status(),
-      timestamp: new Date().toISOString()
-    });
+    const timing = response.timing(); // May be null in some environments
 
-    return {
+    const ttfb = timing && timing.responseStart > 0
+      ? (timing.responseStart - timing.startTime) / 1000
+      : null;
+
+    const headers = response.headers();
+    const w3tcCache = headers['x-powered-by'] || headers['x-cache'] || headers['w3tc-cache'];
+    const cacheControl = headers['cache-control'] || null;
+
+    const log = {
       url,
-      loadTime,
-      status: response.status(),
+      ttl: loadTime,
+      ttfb,
+      status: response.status().toString(),
+      w3tcCache,
+      cacheControl,
+      ts: new Date().toISOString(),
+    };
+
+    // Record metrics
+    await logToLoki(JSON.stringify(log));
+    logger.info('Page load metrics', log);
+    
+    return {
+      ...log,
       success: response.ok()
     };
   } catch (error) {
@@ -165,12 +166,19 @@ async function measurePageLoad(page, url) {
     return {
       url,
       loadTime: -1,
+      ttfb: null,
       status: -1,
       success: false,
       error: error.message
     };
   }
 }
+
+const think = (min, max) => new Promise(resolve => {
+  const delay = Math.floor(Math.random() * (max - min)) + min;
+  setTimeout(resolve, delay);
+});
+
 
 async function runTestSession(sessionId) {
   const browser = await chromium.launch();
@@ -189,7 +197,7 @@ async function runTestSession(sessionId) {
       results.push(result);
       
       // Add think time between requests
-      await new Promise(resolve => setTimeout(resolve, CONFIG.thinkTime));
+      await think(CONFIG.thinkTime / 2, CONFIG.thinkTime * 1.5); // jitter
     }
   }
 
