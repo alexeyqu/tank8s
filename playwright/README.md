@@ -1,112 +1,155 @@
-# Tank8s Load Testing Worker
+# Kubernetes-based Load Testing with Playwright
 
-A Playwright-based load testing worker that measures page load times and performance metrics for web applications.
+This project implements a distributed load testing solution using Playwright and Kubernetes. It measures page load times and provides real-time metrics through Prometheus and Grafana.
 
-## Features
+## Architecture
 
-- Concurrent session testing
-- Multiple page testing
-- Detailed performance metrics
-- JSON logging
-- Configurable test parameters
-- Docker support
+The solution consists of:
+- Load testing workers running Playwright
+- Prometheus for metrics collection
+- Grafana for visualization
+- Kubernetes for orchestration
 
-## Installation
+## Prerequisites
 
-### Local Installation
+- Node.js 16+
+- Docker
+- Minikube or a Kubernetes cluster
+- kubectl
+- Terraform (for infrastructure setup)
 
-1. Install dependencies:
+## Setup
+
+### 1. Install Dependencies
+
 ```bash
 npm install
 ```
 
-2. Install Playwright browsers:
+### 2. Build Docker Image
+
 ```bash
-npx playwright install chromium
+docker build -t playwright-load-tester .
 ```
 
-### Docker Installation
+### 3. Deploy to Kubernetes
 
-1. Build the Docker image:
+#### Using Minikube
+
+1. Start Minikube:
 ```bash
-docker-compose build
+minikube start
 ```
 
-2. Run the load test:
+2. Deploy monitoring stack:
 ```bash
-docker-compose up
+kubectl apply -f k8s/monitoring/local-monitoring.yaml
 ```
+
+3. Deploy load testers:
+```bash
+kubectl apply -f k8s/load-tester.yaml
+```
+
+### 4. Access Monitoring
+
+1. Prometheus UI:
+```bash
+kubectl port-forward -n monitoring svc/prometheus 9090:9090
+```
+Access at: http://localhost:9090
+
+2. Grafana UI:
+```bash
+kubectl port-forward -n monitoring svc/grafana 3000:3000
+```
+Access at: http://localhost:3000
+- Default credentials: admin/admin
 
 ## Configuration
 
-The load tester can be configured through environment variables:
+### Environment Variables
 
-- `TARGET_URL`: The base URL of the application to test (default: http://localhost:3000)
+- `TARGET_URL`: URL to test (default: http://localhost:3000)
 - `CONCURRENT_SESSIONS`: Number of concurrent test sessions (default: 5)
-- `TEST_DURATION`: Test duration in milliseconds (default: 300000 - 5 minutes)
-- `THINK_TIME`: Time between requests in milliseconds (default: 2000 - 2 seconds)
+- `TEST_DURATION`: Test duration in milliseconds (default: 300000)
+- `THINK_TIME`: Time between requests in milliseconds (default: 2000)
 
-### Docker Configuration
+### Metrics
 
-When using Docker, you can set environment variables in the following ways:
+The solution exposes the following metrics:
 
-1. Using docker-compose:
+- `playwright_page_load_time_seconds`: Histogram of page load times
+- `playwright_page_load_errors_total`: Counter of page load errors
+
+## Monitoring
+
+### Prometheus Queries
+
+Example queries for Prometheus:
+
+1. Average page load time:
+```
+rate(playwright_page_load_time_seconds_sum[5m]) / rate(playwright_page_load_time_seconds_count[5m])
+```
+
+2. Error rate:
+```
+rate(playwright_page_load_errors_total[5m])
+```
+
+### Grafana Dashboards
+
+Import the following dashboard to visualize the metrics:
+1. Go to Grafana UI
+2. Navigate to Dashboards > Import
+3. Use the dashboard ID: [TODO: Add dashboard ID]
+
+## Troubleshooting
+
+### Common Issues
+
+1. Pods not starting:
 ```bash
-TARGET_URL=http://your-app.com docker-compose up
+kubectl describe pod <pod-name> -n monitoring
+kubectl logs <pod-name> -n monitoring
 ```
 
-2. Using a .env file:
+2. Metrics not showing:
 ```bash
-echo "TARGET_URL=http://your-app.com" > .env
-docker-compose up
+kubectl port-forward <pod-name> 3000:3000
+curl localhost:3000/metrics
 ```
 
-## Usage
-
-### Local Usage
-
-Run the load test:
+3. Prometheus targets:
 ```bash
-npm test
+kubectl port-forward -n monitoring svc/prometheus 9090:9090
+# Check targets in Prometheus UI
 ```
 
-### Docker Usage
+## Development
 
-Run the load test:
+### Adding New Tests
+
+1. Modify `src/worker.js` to add new test scenarios
+2. Rebuild and redeploy:
 ```bash
-docker-compose up
+docker build -t playwright-load-tester .
+kubectl rollout restart deployment playwright-load-tester
 ```
 
-The test will:
-1. Launch multiple concurrent browser sessions
-2. Visit each configured page repeatedly
-3. Measure and log load times
-4. Generate a summary report
+### Local Development
 
-## Output
-
-The test generates two types of logs:
-1. Console output with real-time metrics
-2. `logs/load-test.log` file with detailed JSON-formatted results
-
-When using Docker, logs are persisted in the `logs` directory on your host machine.
-
-## Customization
-
-To test different pages, modify the `pagesToTest` array in `src/worker.js`:
-
-```javascript
-pagesToTest: [
-  '/',
-  '/about',
-  '/contact'
-]
+1. Start the worker locally:
+```bash
+node src/worker.js
 ```
 
-## Metrics Collected
+2. Access metrics:
+```bash
+curl localhost:3000/metrics
+```
 
-- Page load time
-- HTTP status codes
-- Success/failure rates
-- Minimum and maximum load times
-- Average load times per page 
+## License
+
+MIT 
