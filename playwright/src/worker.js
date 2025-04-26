@@ -1,29 +1,7 @@
 const { chromium } = require('@playwright/test');
 const winston = require('winston');
 const path = require('path');
-const promClient = require('prom-client');
 const express = require('express');
-
-// Initialize Prometheus metrics
-// const register = new promClient.Registry();
-// promClient.collectDefaultMetrics({ register });
-
-// // Custom metrics
-// const pageLoadTime = new promClient.Histogram({
-//   name: 'playwright_page_load_time_seconds',
-//   help: 'Time taken to load pages',
-//   labelNames: ['url', 'status'],
-//   buckets: [0.1, 0.5, 1, 2, 5, 10]
-// });
-
-// const pageLoadErrors = new promClient.Counter({
-//   name: 'playwright_page_load_errors_total',
-//   help: 'Total number of page load errors',
-//   labelNames: ['url']
-// });
-
-// register.registerMetric(pageLoadTime);
-// register.registerMetric(pageLoadErrors);
 
 async function logToLoki(message, labels = {}) {
   const stream = {
@@ -107,11 +85,11 @@ const CONFIG = {
   targetUrl: process.env.TARGET_URL || 'http://localhost:3000',
   pagesToTest: [
     '/',
-    '/about',
   ],
   concurrentSessions: parseInt(process.env.CONCURRENT_SESSIONS) || 5,
   testDuration: parseInt(process.env.TEST_DURATION) || 300000, // 5 minutes in milliseconds
   thinkTime: parseInt(process.env.THINK_TIME) || 2000, // 2 seconds between requests
+  debug: process.env.DEBUG === 'true',
 };
 
 // Log the configuration at startup
@@ -120,17 +98,55 @@ logger.info('Starting load test with configuration', {
   timestamp: new Date().toISOString()
 });
 
+async function setupRouteInterception(page, sessionId) {
+  await page.route("**/*", (route, request) => {
+    const url = request.url();
+    const resourceType = request.resourceType(); // e.g. 'document', 'script', 'style', etc.
+
+    const isStatic = ['script', 'stylesheet', 'image', 'font'].includes(resourceType);
+
+    if (isStatic) {
+      const newUrl = url.includes('?')
+        ? `${url}&testid=${sessionId}`
+        : `${url}?testid=${sessionId}`;
+
+      console.log(`Intercepting request: ${url} -> ${newUrl}`);
+
+      return route.continue({ url: newUrl });
+    }
+
+    return route.continue(); // let other requests through untouched
+  });
+}
+
 async function measurePageLoad(page, url) {
   const startTime = Date.now();
   try {
-    const response = await page.goto(url, { waitUntil: 'networkidle' });
-    const loadTime = (Date.now() - startTime) / 1000; // Convert to seconds
-    
-    const timing = response.timing(); // May be null in some environments
+    const response = await page.goto(url, { waitUntil: 'load' });
+    const loadTime = (Date.now() - startTime) / 1000;
 
-    const ttfb = timing && timing.responseStart > 0
-      ? (timing.responseStart - timing.startTime) / 1000
-      : null;
+    const perf = await page.evaluate(() => {
+      const timing = performance.timing;
+      const paints = performance.getEntriesByType('paint');
+      let fcp = null;
+      for (const p of paints) {
+        if (p.name === 'first-contentful-paint') {
+          fcp = p.startTime;
+        }
+      }
+      return {
+        navigationStart: timing.navigationStart,
+        responseStart: timing.responseStart,
+        loadEventEnd: timing.loadEventEnd,
+        firstContentfulPaint: fcp
+      };
+    });
+    
+    const ttfb = (perf.responseStart - perf.navigationStart) / 1000;
+    const ttl = (perf.loadEventEnd - perf.navigationStart) / 1000;
+    const fcp = perf.firstContentfulPaint ? perf.firstContentfulPaint / 1000 : null;
+
+    console.log(`Page load time for ${url}: ${ttl} seconds or ${loadTime} seconds`);
 
     const headers = response.headers();
     const w3tcCache = headers['x-powered-by'] || headers['x-cache'] || headers['w3tc-cache'];
@@ -138,8 +154,9 @@ async function measurePageLoad(page, url) {
 
     const log = {
       url,
-      ttl: loadTime,
+      loadTime,
       ttfb,
+      fcp,
       status: response.status().toString(),
       w3tcCache,
       cacheControl,
@@ -147,7 +164,9 @@ async function measurePageLoad(page, url) {
     };
 
     // Record metrics
-    await logToLoki(JSON.stringify(log));
+    if (!CONFIG.debug) {
+      await logToLoki(JSON.stringify(log));
+    }
     logger.info('Page load metrics', log);
     
     return {
@@ -182,11 +201,6 @@ const think = (min, max) => new Promise(resolve => {
 
 async function runTestSession(sessionId) {
   const browser = await chromium.launch();
-  const context = await browser.newContext({
-    ignoreHTTPSErrors: true,
-    userAgent: 'PlaywrightLoadTestBot/1.0'
-  });
-  const page = await context.newPage();
 
   logger.info('Starting test session', { sessionId });
 
@@ -194,6 +208,18 @@ async function runTestSession(sessionId) {
   const results = [];
 
   while (Date.now() - startTime < CONFIG.testDuration) {
+    const context = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      userAgent: 'PlaywrightLoadTestBot/1.0'
+    });
+    await context.setExtraHTTPHeaders({
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    });
+    const page = await context.newPage();
+
+    // await setupRouteInterception(page, sessionId);
+
     for (const path of CONFIG.pagesToTest) {
       const url = `${CONFIG.targetUrl}${path}`;
       const result = await measurePageLoad(page, url);
