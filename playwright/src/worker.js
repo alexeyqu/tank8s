@@ -3,6 +3,8 @@ const winston = require('winston');
 const path = require('path');
 const express = require('express');
 
+require('dotenv').config();
+
 async function logToLoki(message, labels = {}) {
   const stream = {
     stream: {
@@ -97,27 +99,6 @@ logger.info('Starting load test with configuration', {
   config: CONFIG,
   timestamp: new Date().toISOString()
 });
-
-async function setupRouteInterception(page, sessionId) {
-  await page.route("**/*", (route, request) => {
-    const url = request.url();
-    const resourceType = request.resourceType(); // e.g. 'document', 'script', 'style', etc.
-
-    const isStatic = ['script', 'stylesheet', 'image', 'font'].includes(resourceType);
-
-    if (isStatic) {
-      const newUrl = url.includes('?')
-        ? `${url}&testid=${sessionId}`
-        : `${url}?testid=${sessionId}`;
-
-      console.log(`Intercepting request: ${url} -> ${newUrl}`);
-
-      return route.continue({ url: newUrl });
-    }
-
-    return route.continue(); // let other requests through untouched
-  });
-}
 
 async function measurePageLoad(page, url) {
   const startTime = Date.now();
@@ -217,8 +198,6 @@ async function runTestSession(sessionId) {
       'Pragma': 'no-cache'
     });
     const page = await context.newPage();
-
-    // await setupRouteInterception(page, sessionId);
 
     for (const path of CONFIG.pagesToTest) {
       const url = `${CONFIG.targetUrl}${path}`;
