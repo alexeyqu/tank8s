@@ -1,42 +1,7 @@
-const express = require('express');
-
 const { runTestSession } = require('./test');
 const { logger } = require('./utils');
 
 require('dotenv').config();
-
-// Start metrics server
-const app = express();
-const port = 3000;
-
-// Add logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  next();
-});
-
-app.get('/metrics', async (req, res) => {
-  try {
-    console.log('Metrics endpoint called');
-    const metrics = await register.metrics();
-    console.log('Metrics collected:', metrics);
-    res.set('Content-Type', register.contentType);
-    res.end(metrics);
-  } catch (error) {
-    console.error('Error collecting metrics:', error);
-    res.status(500).send('Error collecting metrics');
-  }
-});
-
-app.get('/health', (req, res) => {
-  res.send('OK');
-});
-
-app.listen(port, () => {
-  console.log(`Metrics server listening on port ${port}`);
-  console.log(`Health check available at http://localhost:${port}/health`);
-  console.log(`Metrics available at http://localhost:${port}/metrics`);
-});
 
 // Configuration
 const CONFIG = {
