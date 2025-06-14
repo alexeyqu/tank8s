@@ -61,7 +61,7 @@ grafana:
                 "title": "Avg TTL (1m) HTTP 200",
                 "targets": [
                   {
-                    "expr": "avg_over_time({pod=~\"playwright-.*\"} | json log | line_format \"{{.log}}\" | json | __error__=\"\" | message=\"Page load metrics\" | status=\"200\" | unwrap loadTime [1m]) by (url)"
+                    "expr": "avg_over_time({pod=~\"playwright-.*\"} | json log | line_format \"{{.log}}\" | json | __error__=\"\" | message=\"Page load metrics\" | status=\"200\" | unwrap loadTime [1m]) by (url)",
                     "refId": "A",
                     "datasource": {
                       "type": "loki",
