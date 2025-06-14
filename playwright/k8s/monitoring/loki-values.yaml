@@ -73,6 +73,21 @@ grafana:
               },
               {
                 "type": "timeseries",
+                "title": "Count of 200 HTTP",
+                "targets": [
+                  {
+                    "expr": "sum by (url)(count_over_time({pod=~\"playwright-.*\"} | json log | line_format \"{{.log}}\" | json |  __error__=\"\" | message=\"Page load metrics\" | status=\"200\" | label_format status=\"{{.status}}\" [1m]))",
+                    "refId": "A",
+                    "datasource": {
+                      "type": "loki",
+                      "uid": "loki"
+                    }
+                  }
+                ],
+                "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 }
+              }
+              {
+                "type": "timeseries",
                 "title": "Count of non-200 HTTP",
                 "targets": [
                   {
@@ -84,7 +99,7 @@ grafana:
                     }
                   }
                 ],
-                "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 }
+                "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 }
               }
             ]
           }
