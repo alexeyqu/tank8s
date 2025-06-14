@@ -2,6 +2,9 @@ grafana:
   enabled: true
   service:
     type: LoadBalancer
+  sidecar:
+    datasources:
+      enabled: false
   nodeSelector:
     role: monitoring
   image:
@@ -58,7 +61,7 @@ grafana:
                 "title": "Avg TTL (1m) HTTP 200",
                 "targets": [
                   {
-                    "expr": "avg_over_time({pod=~\"playwright-.*\"} | json | __error__=\"\" | message=\"Page load metrics\" | status=\"200\" | unwrap loadTime [1m]) by (url)",
+                    "expr": "avg_over_time({pod=~\"playwright-.*\"} | json log | line_format \"{{.log}}\" | json | __error__=\"\" | message=\"Page load metrics\" | status=\"200\" | unwrap loadTime [1m]) by (url)"
                     "refId": "A",
                     "datasource": {
                       "type": "loki",
@@ -73,7 +76,7 @@ grafana:
                 "title": "Count of non-200 HTTP",
                 "targets": [
                   {
-                    "expr": "sum by (url)(count_over_time({pod=~\"playwright-.*\"} | json |  __error__=\"\" | message=\"Page load metrics\" | status!=\"200\" | label_format status=\"{{.status}}\" [1m]))",
+                    "expr": "sum by (url)(count_over_time({pod=~\"playwright-.*\"} | json log | line_format \"{{.log}}\" | json |  __error__=\"\" | message=\"Page load metrics\" | status!=\"200\" | label_format status=\"{{.status}}\" [1m]))",
                     "refId": "A",
                     "datasource": {
                       "type": "loki",
