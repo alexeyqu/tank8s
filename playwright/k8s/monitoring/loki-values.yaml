@@ -85,7 +85,7 @@ grafana:
                   }
                 ],
                 "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 }
-              }
+              },
               {
                 "type": "timeseries",
                 "title": "Count of non-200 HTTP",
